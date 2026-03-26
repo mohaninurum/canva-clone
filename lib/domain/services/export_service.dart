@@ -1,48 +1,42 @@
-import 'package:flutter/foundation.dart';
-import 'package:ffmpeg_kit_flutter/ffmpeg_kit.dart';
-import 'package:ffmpeg_kit_flutter/return_code.dart';
-import '../models/editor_state.dart';
-import '../models/canvas_element.dart';
+import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new/return_code.dart';
+import 'package:path_provider/path_provider.dart';
+import '../models/models.dart';
 
 class ExportService {
-  Future<bool> exportToMp4(EditorState state, String outputPath) async {
-    // Mathematical algorithm orchestrating FFMPEG node strings parsing absolute boundaries
-    final commandBuffer = StringBuffer();
+  static Future<String?> exportProject(Project project) async {
+    final directory = await getApplicationDocumentsDirectory();
+    final outputPath = '${directory.path}/export_${DateTime.now().millisecondsSinceEpoch}.mp4';
+
+    // Simplified FFmpeg command generation
+    // In a real app, this would be a complex filter_complex chain
+    // For now, we'll just demonstrate the structure
     
-    // Generate solid white background layer (1080p, 10s default duration)
-    commandBuffer.write('-y -f lavfi -i color=c=white:s=1920x1080:d=10 ');
-    
-    int filterIndex = 1;
-    final complexFilter = StringBuffer();
-    
-    for (final element in state.elements) {
-      if (element is VideoElement) {
-        commandBuffer.write('-i "${element.path}" ');
-        complexFilter.write('[$filterIndex:v]scale=${element.size.width}:${element.size.height}[v$filterIndex]; ');
-        filterIndex++;
+    String inputs = "";
+    String filters = "";
+    int inputCount = 0;
+
+    for (var element in project.elements) {
+      if (element.type == ElementType.video || element.type == ElementType.image) {
+        inputs += " -i ${element.content}";
+        // Apply scaling and positioning filters
+        filters += "[$inputCount:v]scale=${element.size.width}:${element.size.height}[v$inputCount];";
+        inputCount++;
       }
-      // Audio tracks could be interleaved as [a$filterIndex]
-    }
-    
-    // Append the encoded overlay chains if objects exist
-    if (filterIndex > 1) {
-      commandBuffer.write('-filter_complex "${complexFilter.toString()}[0:v][v1]overlay=x=960:y=540" ');
     }
 
-    // Output bindings
-    final command = '${commandBuffer.toString()}-c:v libx264 -preset ultrafast "$outputPath"';
-    
-    debugPrint('Executing Render Engine: $command');
+    // This is a placeholder command. Real implementation requires complex overlaying logic.
+    final command = "$inputs -filter_complex \"$filters\" -map \"[v${inputCount - 1}]\" -aspect ${project.canvasSize.width}/${project.canvasSize.height} $outputPath";
+
     final session = await FFmpegKit.execute(command);
     final returnCode = await session.getReturnCode();
-    
+
     if (ReturnCode.isSuccess(returnCode)) {
-      debugPrint("Successfully Exported MP4 to Native Path: $outputPath");
-      return true;
+      return outputPath;
     } else {
-      final logs = await session.getLogsAsString();
-      debugPrint("FFMPEG COMPILE ERROR: $logs");
-      return false;
+      final logs = await session.getLogs();
+      print("FFmpeg Error: ${logs.join('\n')}");
+      return null;
     }
   }
 }
